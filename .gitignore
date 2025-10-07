@@ -6,6 +6,15 @@
 # Logs
 *.log
 discovery.log
+demo-*.log
+demo-generated-allowlist.yaml
+
+# Demo output directories
+demo_output_*/
+
+# Coverage files
+coverage.out
+coverage.html
 
 # Go build artifacts
 *.exe

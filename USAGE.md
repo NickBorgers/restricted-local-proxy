@@ -53,15 +53,33 @@ allowlist:
 
 ## Running
 
+### Command Line Options
+
+The proxy supports the following flags (similar to ghostunnel):
+
+- `--listen <address>`: Address to listen on (default: `localhost:9091`)
+  - Examples: `localhost:8080`, `:9091`, `0.0.0.0:3128`
+
 ### Normal Mode
 ```bash
+# Use default port (localhost:9091)
 ./restricted-proxy
+
+# Specify custom listen address
+./restricted-proxy --listen localhost:8080
+
+# Listen on all interfaces
+./restricted-proxy --listen :9091
 ```
 Logs are output as JSON to stdout.
 
 ### Discovery Mode
 ```bash
+# Use default port
 ./restricted-proxy-discovery > discovery.log
+
+# Specify custom listen address
+./restricted-proxy-discovery --listen localhost:8080 > discovery.log
 ```
 Run this version to collect connection attempts. All connections are allowed and logged.
 
@@ -134,14 +152,14 @@ The tool extracts all unique destinations from `connection_attempt` events and g
    ```bash
    # Edit allowlist.yaml with known destinations
    make build
-   ./restricted-proxy > proxy.log &
+   ./restricted-proxy --listen localhost:9091 > proxy.log &
    ```
 
 2. **Discover new destinations:**
    ```bash
    # Build and run discovery mode
    make build-discovery
-   ./restricted-proxy-discovery > discovery.log &
+   ./restricted-proxy-discovery --listen localhost:9091 > discovery.log &
 
    # Let it run for a period (hours/days)
    # Stop the proxy when done

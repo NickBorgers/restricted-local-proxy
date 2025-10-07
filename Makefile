@@ -43,6 +43,16 @@ clean:
 test:
 	go test -v ./...
 
+## test-coverage: Run tests with coverage report
+test-coverage:
+	go test -v -cover -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+## demo: Run the demo script
+demo:
+	./demo.sh
+
 ## help: Show this help message
 help:
 	@echo "Available targets:"

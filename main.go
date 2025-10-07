@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -60,11 +61,11 @@ type LogEntry struct {
 
 // Logger handles structured logging
 type Logger struct {
-	output *os.File
+	output io.Writer
 }
 
 // NewLogger creates a new structured logger
-func NewLogger(output *os.File) *Logger {
+func NewLogger(output io.Writer) *Logger {
 	return &Logger{output: output}
 }
 
@@ -107,13 +108,13 @@ func (l *Logger) ConnectionAttempt(destination, action string, err error) {
 // ProxyServer handles HTTP CONNECT requests for tunneling
 type ProxyServer struct {
 	allowlist     map[string]bool
-	port          string
+	listen        string
 	discoveryMode bool
 	logger        *Logger
 }
 
 // NewProxyServer creates a new proxy server with the embedded YAML allowlist
-func NewProxyServer(port string, logger *Logger) (*ProxyServer, error) {
+func NewProxyServer(listen string, logger *Logger) (*ProxyServer, error) {
 	allowlistEntries, err := loadAllowlist()
 	if err != nil {
 		return nil, err
@@ -128,7 +129,7 @@ func NewProxyServer(port string, logger *Logger) (*ProxyServer, error) {
 
 	return &ProxyServer{
 		allowlist:     allowMap,
-		port:          port,
+		listen:        listen,
 		discoveryMode: discoveryMode,
 		logger:        logger,
 	}, nil
@@ -227,7 +228,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 // Start starts the proxy server
 func (p *ProxyServer) Start() error {
 	server := &http.Server{
-		Addr:    ":" + p.port,
+		Addr:    p.listen,
 		Handler: http.HandlerFunc(p.handleConnect),
 	}
 
@@ -239,7 +240,7 @@ func (p *ProxyServer) Start() error {
 	p.logger.Log(LogEntry{
 		Level:        LogLevelInfo,
 		Event:        "proxy_starting",
-		Message:      fmt.Sprintf("Mode: %s, Port: %s", mode, p.port),
+		Message:      fmt.Sprintf("Mode: %s, Listen: %s", mode, p.listen),
 		AllowedCount: len(p.allowlist),
 	})
 
@@ -256,10 +257,13 @@ func (p *ProxyServer) Start() error {
 }
 
 func main() {
+	// Command line flags
+	listen := flag.String("listen", "localhost:9091", "Address to listen on (e.g., localhost:9091 or :8080)")
+	flag.Parse()
+
 	logger := NewLogger(os.Stdout)
 
-	port := "9091"
-	proxy, err := NewProxyServer(port, logger)
+	proxy, err := NewProxyServer(*listen, logger)
 	if err != nil {
 		logger.Error("initialization_failed", "Failed to create proxy server", err.Error())
 		os.Exit(1)
