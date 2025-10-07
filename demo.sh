@@ -18,9 +18,9 @@ PROXY_BINARY="./restricted-proxy"
 DISCOVERY_BINARY="./restricted-proxy-discovery"
 LOGS_TO_CONFIG="./logs-to-config"
 
-# Create output directory with timestamp
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_DIR="demo_output_${TIMESTAMP}"
+# Create/clean output directory
+OUTPUT_DIR="demo_output"
+rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 echo -e "${BLUE}Output directory: $OUTPUT_DIR${NC}\n"

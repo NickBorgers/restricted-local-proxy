@@ -9,8 +9,8 @@ discovery.log
 demo-*.log
 demo-generated-allowlist.yaml
 
-# Demo output directories
-demo_output_*/
+# Demo output directory
+demo_output/
 
 # Coverage files
 coverage.out
