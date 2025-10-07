@@ -1,7 +1,0 @@
-# Allowlist configuration generated from discovery logs
-# Format: hostname:port or just hostname (allows any port)
-allowlist:
-    - example.com:443
-    - github.com:443
-    - reddit.com:443
-    - twitter.com:443
