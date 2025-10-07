@@ -1,0 +1,7 @@
+# Allowlist configuration for restricted local proxy
+# Format: hostname:port or just hostname (allows any port)
+allowlist:
+  - example.com
+  - httpbin.org
+  - www.google.com:443
+  - api.github.com:443

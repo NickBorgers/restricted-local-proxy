@@ -1,39 +1,137 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
-// HARDCODED ALLOWLIST - this is compiled into the binary
-// Format: "hostname:port" or just "hostname" (any port)
-var allowlist = []string{
-	"example.com",
-	"httpbin.org",
-	"www.google.com:443",
-	"api.github.com:443",
+//go:embed allowlist.yaml
+var allowlistYAML []byte
+
+// Config represents the YAML configuration structure
+type Config struct {
+	Allowlist []string `yaml:"allowlist"`
+}
+
+// DiscoveryMode is set at compile time using -ldflags "-X main.DiscoveryMode=true"
+var DiscoveryMode = "false"
+
+// loadAllowlist loads and parses the embedded YAML configuration
+func loadAllowlist() ([]string, error) {
+	var config Config
+	if err := yaml.Unmarshal(allowlistYAML, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse allowlist.yaml: %w", err)
+	}
+	return config.Allowlist, nil
+}
+
+// LogLevel represents the severity of a log message
+type LogLevel string
+
+const (
+	LogLevelInfo    LogLevel = "INFO"
+	LogLevelWarning LogLevel = "WARNING"
+	LogLevelError   LogLevel = "ERROR"
+	LogLevelDebug   LogLevel = "DEBUG"
+)
+
+// LogEntry represents a structured log entry
+type LogEntry struct {
+	Timestamp    string                 `json:"timestamp"`
+	Level        LogLevel               `json:"level"`
+	Event        string                 `json:"event"`
+	Destination  string                 `json:"destination,omitempty"`
+	Action       string                 `json:"action,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	AllowedCount int                    `json:"allowed_count,omitempty"`
+	Message      string                 `json:"message,omitempty"`
+	Extra        map[string]interface{} `json:"extra,omitempty"`
+}
+
+// Logger handles structured logging
+type Logger struct {
+	output *os.File
+}
+
+// NewLogger creates a new structured logger
+func NewLogger(output *os.File) *Logger {
+	return &Logger{output: output}
+}
+
+// Log writes a structured log entry
+func (l *Logger) Log(entry LogEntry) {
+	entry.Timestamp = time.Now().UTC().Format(time.RFC3339)
+	data, err := json.Marshal(entry)
+	if err != nil {
+		log.Printf("Failed to marshal log entry: %v", err)
+		return
+	}
+	fmt.Fprintln(l.output, string(data))
+}
+
+// Info logs an info-level message
+func (l *Logger) Info(event, message string) {
+	l.Log(LogEntry{Level: LogLevelInfo, Event: event, Message: message})
+}
+
+// Error logs an error-level message
+func (l *Logger) Error(event, message, errMsg string) {
+	l.Log(LogEntry{Level: LogLevelError, Event: event, Message: message, Error: errMsg})
+}
+
+// ConnectionAttempt logs a connection attempt
+func (l *Logger) ConnectionAttempt(destination, action string, err error) {
+	entry := LogEntry{
+		Level:       LogLevelInfo,
+		Event:       "connection_attempt",
+		Destination: destination,
+		Action:      action,
+	}
+	if err != nil {
+		entry.Level = LogLevelError
+		entry.Error = err.Error()
+	}
+	l.Log(entry)
 }
 
 // ProxyServer handles HTTP CONNECT requests for tunneling
 type ProxyServer struct {
-	allowlist map[string]bool
-	port      string
+	allowlist     map[string]bool
+	port          string
+	discoveryMode bool
+	logger        *Logger
 }
 
-// NewProxyServer creates a new proxy server with the hardcoded allowlist
-func NewProxyServer(port string) *ProxyServer {
+// NewProxyServer creates a new proxy server with the embedded YAML allowlist
+func NewProxyServer(port string, logger *Logger) (*ProxyServer, error) {
+	allowlistEntries, err := loadAllowlist()
+	if err != nil {
+		return nil, err
+	}
+
 	allowMap := make(map[string]bool)
-	for _, entry := range allowlist {
+	for _, entry := range allowlistEntries {
 		allowMap[entry] = true
 	}
+
+	discoveryMode := DiscoveryMode == "true"
+
 	return &ProxyServer{
-		allowlist: allowMap,
-		port:      port,
-	}
+		allowlist:     allowMap,
+		port:          port,
+		discoveryMode: discoveryMode,
+		logger:        logger,
+	}, nil
 }
 
 // isAllowed checks if a host:port combination is allowed
@@ -61,19 +159,23 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	destHost := r.Host
 
-	// Check allowlist
-	if !p.isAllowed(destHost) {
-		log.Printf("BLOCKED: Connection attempt to %s (not in allowlist)", destHost)
-		http.Error(w, "Forbidden: Destination not allowed", http.StatusForbidden)
-		return
+	// In discovery mode, allow all connections and log them
+	if p.discoveryMode {
+		p.logger.ConnectionAttempt(destHost, "allowed_discovery", nil)
+	} else {
+		// Check allowlist in normal mode
+		if !p.isAllowed(destHost) {
+			p.logger.ConnectionAttempt(destHost, "blocked", nil)
+			http.Error(w, "Forbidden: Destination not allowed", http.StatusForbidden)
+			return
+		}
+		p.logger.ConnectionAttempt(destHost, "allowed", nil)
 	}
-
-	log.Printf("ALLOWED: Connecting to %s", destHost)
 
 	// Connect to the destination
 	destConn, err := net.DialTimeout("tcp", destHost, 10*time.Second)
 	if err != nil {
-		log.Printf("ERROR: Failed to connect to %s: %v", destHost, err)
+		p.logger.ConnectionAttempt(destHost, "connection_failed", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
@@ -115,7 +217,11 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	wg.Wait()
-	log.Printf("Connection to %s closed", destHost)
+	p.logger.Log(LogEntry{
+		Level:       LogLevelInfo,
+		Event:       "connection_closed",
+		Destination: destHost,
+	})
 }
 
 // Start starts the proxy server
@@ -125,20 +231,42 @@ func (p *ProxyServer) Start() error {
 		Handler: http.HandlerFunc(p.handleConnect),
 	}
 
-	log.Printf("Restricted Local Proxy starting on port %s", p.port)
-	log.Printf("Allowlist contains %d entries:", len(allowlist))
-	for _, entry := range allowlist {
-		log.Printf("  - %s", entry)
+	mode := "RESTRICTED"
+	if p.discoveryMode {
+		mode = "DISCOVERY"
+	}
+
+	p.logger.Log(LogEntry{
+		Level:        LogLevelInfo,
+		Event:        "proxy_starting",
+		Message:      fmt.Sprintf("Mode: %s, Port: %s", mode, p.port),
+		AllowedCount: len(p.allowlist),
+	})
+
+	// Log allowlist entries
+	for entry := range p.allowlist {
+		p.logger.Log(LogEntry{
+			Level:       LogLevelDebug,
+			Event:       "allowlist_entry",
+			Destination: entry,
+		})
 	}
 
 	return server.ListenAndServe()
 }
 
 func main() {
+	logger := NewLogger(os.Stdout)
+
 	port := "9091"
-	proxy := NewProxyServer(port)
+	proxy, err := NewProxyServer(port, logger)
+	if err != nil {
+		logger.Error("initialization_failed", "Failed to create proxy server", err.Error())
+		os.Exit(1)
+	}
 
 	if err := proxy.Start(); err != nil {
-		log.Fatalf("Proxy server failed: %v", err)
+		logger.Error("server_failed", "Proxy server failed", err.Error())
+		os.Exit(1)
 	}
 }

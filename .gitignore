@@ -1,5 +1,11 @@
-# Binary
-restricted-proxy
+# Binaries
+/restricted-proxy
+/restricted-proxy-discovery
+/logs-to-config
+
+# Logs
+*.log
+discovery.log
 
 # Go build artifacts
 *.exe
