@@ -162,7 +162,7 @@ echo ""
 # Test allowed connections
 echo -e "${YELLOW}Testing allowed destinations:${NC}"
 test_connection "example.com" "success"
-test_connection "httpbin.org" "success"
+test_connection "example.org" "success"
 
 echo ""
 
@@ -218,8 +218,8 @@ echo -e "${GREEN}Note: Different hash = different mode embedded in binary${NC}\n
 # Test various connections (all should be allowed in discovery mode)
 echo -e "${YELLOW}Testing various destinations (all allowed in discovery mode):${NC}"
 test_connection "example.com" "success"
-test_connection "twitter.com" "success"
-test_connection "reddit.com" "success"
+test_connection "example.org" "success"
+test_connection "www.google.com:443" "success"
 test_connection "github.com" "success"
 
 echo ""

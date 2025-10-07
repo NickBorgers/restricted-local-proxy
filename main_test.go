@@ -27,7 +27,7 @@ func TestLoadAllowlist(t *testing.T) {
 	// Check that the embedded allowlist contains expected entries
 	expectedEntries := map[string]bool{
 		"example.com":        true,
-		"httpbin.org":        true,
+		"example.org":        true,
 		"www.google.com:443": true,
 		"api.github.com:443": true,
 	}

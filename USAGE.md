@@ -41,7 +41,7 @@ Edit `allowlist.yaml` to configure allowed destinations:
 # Format: hostname:port or just hostname (allows any port)
 allowlist:
   - example.com
-  - httpbin.org
+  - example.org
   - www.google.com:443
   - api.github.com:443
 ```
